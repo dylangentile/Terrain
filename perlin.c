@@ -1,9 +1,9 @@
 #include "perlin.h"
+#include "smp.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
-#include <assert.h>
 
 double fade(const double t) 
 { 
@@ -141,12 +141,11 @@ typedef struct
 
 	int32_t octave_count;
 
-	thrd_t handle;
-}ThreadData;
+}PerlinThreadArgs;
 
 
 void
-generate_noise_work(const ThreadData* const tdata)
+generate_noise_work(const PerlinThreadArgs* const targs)
 {
 	const int32_t permutation[256] = { 
 		151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
@@ -166,18 +165,18 @@ generate_noise_work(const ThreadData* const tdata)
 	memcpy(p, permutation, 256*sizeof(*p));
 	memcpy(p+256, permutation, 256*sizeof(*p));
 
-	Coord current_coord = tdata->current_coord;
-	double* it = tdata->start;
-	const double* const stop = tdata->start + tdata->count;
+	Coord current_coord = targs->current_coord;
+	double* it = targs->start;
+	const double* const stop = targs->start + targs->count;
 
 	for(; it != stop; it++)
 	{
-		*it = tdata->amp * noise(	((double)current_coord.x)*(tdata->freq/tdata->granularity), 
-									((double)current_coord.y)*(tdata->freq/tdata->granularity), 
+		*it = targs->amp * noise(	((double)current_coord.x)*(targs->freq/targs->granularity), 
+									((double)current_coord.y)*(targs->freq/targs->granularity), 
 									p);
 
 		current_coord.x++;
-		if(current_coord.x >= tdata->size.x)
+		if(current_coord.x >= targs->size.x)
 		{
 			current_coord.x = 0;
 			current_coord.y++;
@@ -187,26 +186,26 @@ generate_noise_work(const ThreadData* const tdata)
 
 
 int
-thread_work(void* tdata_arg)
+perlin_thread_work(void* targs_ptr)
 {
-	ThreadData* const tdata = tdata_arg;
+	PerlinThreadArgs* const targs = targs_ptr;
 
-	const double freq_base = tdata->freq;
-	const double amp_base = tdata->amp;
+	const double freq_base = targs->freq;
+	const double amp_base = targs->amp;
 
-	tdata->freq = 1.0;
-	tdata->amp = 1.0;
+	targs->freq = 1.0;
+	targs->amp = 1.0;
 
-	for(int32_t i = 0; i < tdata->octave_count; i++)
+	for(int32_t i = 0; i < targs->octave_count; i++)
 	{
-		tdata->start = tdata->scratch;
-		generate_noise_work(tdata);
+		targs->start = targs->scratch;
+		generate_noise_work(targs);
 
-		for(int32_t j = 0; j < tdata->count; j++)
-			tdata->final[j] += tdata->scratch[j];
+		for(int32_t j = 0; j < targs->count; j++)
+			targs->final[j] += targs->scratch[j];
 
-		tdata->freq *= freq_base;
-		tdata->amp *= amp_base;
+		targs->freq *= freq_base;
+		targs->amp *= amp_base;
 	}
 
 	return 0;
@@ -214,53 +213,51 @@ thread_work(void* tdata_arg)
 
 
 double* 
-generate_octave_noise_smp(const int32_t thread_count, const Coord size, const int32_t octave_count, const double freq_base, const double amp_base, const double granularity)
+generate_octave_noise_smp(ThreadPool* const tpool, const Coord size, const int32_t octave_count, const double freq_base, const double amp_base, const double granularity)
 {
 	const int32_t image_size = size.x*size.y;
 	double* const layered_image = calloc(image_size, sizeof(*layered_image));
+	
 	double* const scratch_image = calloc(image_size, sizeof(*scratch_image));
-	ThreadData* const thread_array = calloc(thread_count, sizeof(*thread_array)); 
-
+	PerlinThreadArgs* const arg_array = calloc(tpool->thread_count, sizeof(*arg_array)); 
+	void** const arg_ptr_array = calloc(tpool->thread_count, sizeof(*arg_ptr_array));
 
 	{
 		int32_t value_offset = 0;
-		const int32_t value_count = image_size/thread_count;
-		for(int32_t i = 0; i < thread_count; i++)
+		const int32_t value_count = image_size/tpool->thread_count;
+		for(int32_t i = 0; i < tpool->thread_count; i++)
 		{
-			thread_array[i].count = 	value_count;
-			thread_array[i].scratch = 	scratch_image + value_offset;
-			thread_array[i].final = 	layered_image + value_offset;
+			arg_ptr_array[i] = arg_array + i;
 
-			thread_array[i].freq = freq_base;
-			thread_array[i].amp = amp_base;
-			thread_array[i].granularity = granularity;
+			arg_array[i].count = 	value_count;
+			arg_array[i].scratch = 	scratch_image + value_offset;
+			arg_array[i].final = 	layered_image + value_offset;
 
-			thread_array[i].size = size;
+			arg_array[i].freq = freq_base;
+			arg_array[i].amp = amp_base;
+			arg_array[i].granularity = granularity;
 
-			thread_array[i].current_coord.y = value_offset/size.x;
-			thread_array[i].current_coord.x = value_offset%size.x;
+			arg_array[i].size = size;
 
-			thread_array[i].octave_count = octave_count;
+			arg_array[i].current_coord.y = value_offset/size.x;
+			arg_array[i].current_coord.x = value_offset%size.x;
+
+			arg_array[i].octave_count = octave_count;
 
 			value_offset += value_count;
 		}
-		thread_array[thread_count - 1].count = value_count + (image_size%thread_count);
+		arg_array[tpool->thread_count - 1].count = value_count + (image_size%tpool->thread_count);
 	}
 
-
-	for(int32_t i = 0; i < thread_count; i++)
-		assert(thrd_create(&thread_array[i].handle, &thread_work, thread_array + i) == thrd_success && "failed to create thread!");
-
-
-	for(int32_t i = 0; i < thread_count; i++)
-		assert(thrd_join(thread_array[i].handle, NULL) == thrd_success && "failed to join thread");
-
-
-	free(scratch_image);
-	free(thread_array);
-
-	return layered_image;
-
 	
+	smp_submit_work(tpool, &perlin_thread_work, arg_ptr_array);
+	smp_wait_completion(tpool);
+
+	free(arg_ptr_array);
+	free(arg_array);
+	free(scratch_image);
+	
+	
+	return layered_image;
 }
 

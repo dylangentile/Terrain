@@ -2,6 +2,10 @@
 #define TERRAIN_DEFS_H
 
 #include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+#define rassert(x, msg) if(!(x)) {fprintf(stderr, __FILE__":%d -- %s\n", __LINE__, msg); exit(1);} 
 
 typedef struct
 {

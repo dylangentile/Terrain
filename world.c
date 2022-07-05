@@ -14,9 +14,14 @@ generate_world(const Coord size, const uint8_t* noise)
 	for(int32_t i = 0; i < image_size; i++)
 	{
 		const uint8_t n = noise[i];
-		if(n < 60)
+		if(n < 57)
 		{
 			const Color c = {.r=0x00, .g=0x15, .b=0x97, .a=0xFF}; 
+			world_image[i] = c;
+		}
+		else if(n < 60)
+		{
+			const Color c = {.r=0x47, .g=0xBC, .b=0xFF, .a=0xFF}; 
 			world_image[i] = c;
 		}
 		else if(n < 80)
