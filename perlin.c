@@ -166,10 +166,9 @@ generate_noise_work(const PerlinThreadArgs* const targs)
 	memcpy(p+256, permutation, 256*sizeof(*p));
 
 	Coord current_coord = targs->current_coord;
-	double* it = targs->start;
-	const double* const stop = targs->start + targs->count;
 
-	for(; it != stop; it++)
+	const double* const stop = targs->start + targs->count;
+	for(double* it = targs->start; it != stop; it++)
 	{
 		*it = targs->amp * noise(	((double)current_coord.x)*(targs->freq/targs->granularity), 
 									((double)current_coord.y)*(targs->freq/targs->granularity), 
@@ -208,6 +207,11 @@ perlin_thread_work(void* targs_ptr)
 		targs->amp *= amp_base;
 	}
 
+	
+
+	for(int32_t i = 0; i < targs->count; i++)
+		targs->final[i] = (targs->final[i]*0.5) + 0.5;
+	
 	return 0;
 }
 
@@ -256,7 +260,7 @@ generate_octave_noise_smp(ThreadPool* const tpool, const Coord size, const int32
 	free(arg_ptr_array);
 	free(arg_array);
 	free(scratch_image);
-	
+
 	
 	return layered_image;
 }

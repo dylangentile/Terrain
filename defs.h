@@ -30,9 +30,4 @@ typedef struct
 } Color;
 
 
-
-
-
-
-
 #endif

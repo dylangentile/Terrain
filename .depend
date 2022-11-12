@@ -1,4 +1,5 @@
-main.o: main.c perlin.h defs.h smp.h world.h stb_image_write.h
+main.o: main.c perlin.h defs.h smp.h world.h erosion.h stb_image_write.h
+erosion.o: erosion.c erosion.h defs.h
 perlin.o: perlin.c perlin.h defs.h smp.h
 world.o: world.c world.h defs.h
 smp.o: smp.c smp.h defs.h
