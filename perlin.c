@@ -5,38 +5,38 @@
 #include <stdlib.h>
 #include <string.h>
 
-double fade(const double t) 
+fp_t fade(const fp_t t) 
 { 
 	return t * t * t * (t * (t * 6 - 15) + 10); 
 }
 
-double lerp(const double t, const double a, const double b) 
+fp_t lerp(const fp_t t, const fp_t a, const fp_t b) 
 { 
 	return a + t * (b - a); 
 }
 
-double grad(const int hash, const double x, const double y, const double z) {
+fp_t grad(const int hash, const fp_t x, const fp_t y, const fp_t z) {
 	const int h = hash & 15;
-	const double u = h<8 ? x : y;
-	const double v = h<4 ? y : h==12||h==14 ? x : z;
+	const fp_t u = h<8 ? x : y;
+	const fp_t v = h<4 ? y : h==12||h==14 ? x : z;
 	return ((h&1) == 0 ? u : -u) + ((h&2) == 0 ? v : -v);
 }
 
 
-double noise(const double x_, const double y_, const int32_t* p)
+fp_t noise(const fp_t x_, const fp_t y_, const int32_t* p)
 {
 
 	const int32_t X = (int32_t)floor(x_) & 255;
 	const int32_t Y = (int32_t)floor(y_) & 255;
 	const int32_t Z = 12 & 255;	
 
-	const double x = x_ - floor(x_);
-	const double y = y_ - floor(y_);
-	const double z = 0.6;
+	const fp_t x = x_ - floor(x_);
+	const fp_t y = y_ - floor(y_);
+	const fp_t z = 0.6;
 
-	const double u = fade(x);
-	const double v = fade(y);
-	const double w = fade(z);
+	const fp_t u = fade(x);
+	const fp_t v = fade(y);
+	const fp_t w = fade(z);
 
 	int32_t	A = p[X  ]+Y, AA = p[A]+Z, AB = p[A+1]+Z,
 			B = p[X+1]+Y, BA = p[B]+Z, BB = p[B+1]+Z;
@@ -54,11 +54,11 @@ double noise(const double x_, const double y_, const int32_t* p)
 
 
 
-double*
-generate_noise(const Coord size, const double freq, const double amp, const double granularity)
+fp_t*
+generate_noise(const Coord size, const fp_t freq, const fp_t amp, const fp_t granularity)
 {
 	const int32_t noise_image_size = size.x*size.y;
-	double* const noise_image = calloc(noise_image_size, sizeof(*noise_image));
+	fp_t* const noise_image = calloc(noise_image_size, sizeof(*noise_image));
 
 	const int32_t permutation[256] = { 
 		151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
@@ -79,11 +79,11 @@ generate_noise(const Coord size, const double freq, const double amp, const doub
 	memcpy(p+256, permutation, 256*sizeof(*p));
 
 	Coord current_coord;
-	double* it = noise_image;
+	fp_t* it = noise_image;
 
 	for(; it != noise_image + noise_image_size; it++)
 	{
-		*it = amp * noise(((double)current_coord.x)*(freq/granularity), ((double)current_coord.y)*(freq/granularity), p);
+		*it = amp * noise(((fp_t)current_coord.x)*(freq/granularity), ((fp_t)current_coord.y)*(freq/granularity), p);
 
 		current_coord.x++;
 		if(current_coord.x >= size.x)
@@ -100,18 +100,18 @@ generate_noise(const Coord size, const double freq, const double amp, const doub
 
 
 
-double* 
-generate_octave_noise(const Coord size, const int32_t octave_count, const double freq_base, const double amp_base, const double granularity)
+fp_t* 
+generate_octave_noise(const Coord size, const int32_t octave_count, const fp_t freq_base, const fp_t amp_base, const fp_t granularity)
 {
 	const int32_t noise_image_size = size.x*size.y;
-	double* const noise_image = calloc(noise_image_size, sizeof(*noise_image));
+	fp_t* const noise_image = calloc(noise_image_size, sizeof(*noise_image));
 
-	double l = 1.0;
-	double p = 1.0;
+	fp_t l = 1.0;
+	fp_t p = 1.0;
 
 	for(int32_t i = 0; i < octave_count; i++)
 	{
-		double* oct = generate_noise(size, l, p, granularity);
+		fp_t* oct = generate_noise(size, l, p, granularity);
 
 		for(int32_t j = 0; j < noise_image_size; j++)
 			noise_image[j] += oct[j];
@@ -122,6 +122,10 @@ generate_octave_noise(const Coord size, const int32_t octave_count, const double
 		p *= amp_base;
 	}
 
+
+	for(int32_t j = 0; j < noise_image_size; j++)
+		noise_image[j]=noise_image[j]*0.5 + 0.5;
+
 	return noise_image;
 }
 
@@ -129,14 +133,14 @@ typedef struct
 {
 	Coord size;
 	Coord current_coord;
-	double* start;
+	fp_t* start;
 	
-	double freq;
-	double amp;
-	double granularity;
+	fp_t freq;
+	fp_t amp;
+	fp_t granularity;
 
-	double* scratch;
-	double* final;
+	fp_t* scratch;
+	fp_t* final;
 	int32_t count;
 
 	int32_t octave_count;
@@ -167,11 +171,11 @@ generate_noise_work(const PerlinThreadArgs* const targs)
 
 	Coord current_coord = targs->current_coord;
 
-	const double* const stop = targs->start + targs->count;
-	for(double* it = targs->start; it != stop; it++)
+	const fp_t* const stop = targs->start + targs->count;
+	for(fp_t* it = targs->start; it != stop; it++)
 	{
-		*it = targs->amp * noise(	((double)current_coord.x)*(targs->freq/targs->granularity), 
-									((double)current_coord.y)*(targs->freq/targs->granularity), 
+		*it = targs->amp * noise(	((fp_t)current_coord.x)*(targs->freq/targs->granularity), 
+									((fp_t)current_coord.y)*(targs->freq/targs->granularity), 
 									p);
 
 		current_coord.x++;
@@ -189,8 +193,8 @@ perlin_thread_work(void* targs_ptr)
 {
 	PerlinThreadArgs* const targs = targs_ptr;
 
-	const double freq_base = targs->freq;
-	const double amp_base = targs->amp;
+	const fp_t freq_base = targs->freq;
+	const fp_t amp_base = targs->amp;
 
 	targs->freq = 1.0;
 	targs->amp = 1.0;
@@ -212,17 +216,18 @@ perlin_thread_work(void* targs_ptr)
 	for(int32_t i = 0; i < targs->count; i++)
 		targs->final[i] = (targs->final[i]*0.5) + 0.5;
 	
+	
 	return 0;
 }
 
 
-double* 
-generate_octave_noise_smp(ThreadPool* const tpool, const Coord size, const int32_t octave_count, const double freq_base, const double amp_base, const double granularity)
+fp_t* 
+generate_octave_noise_smp(ThreadPool* const tpool, const Coord size, const int32_t octave_count, const fp_t freq_base, const fp_t amp_base, const fp_t granularity)
 {
 	const int32_t image_size = size.x*size.y;
-	double* const layered_image = calloc(image_size, sizeof(*layered_image));
+	fp_t* const layered_image = calloc(image_size, sizeof(*layered_image));
 	
-	double* const scratch_image = calloc(image_size, sizeof(*scratch_image));
+	fp_t* const scratch_image = calloc(image_size, sizeof(*scratch_image));
 	PerlinThreadArgs* const arg_array = calloc(tpool->thread_count, sizeof(*arg_array)); 
 	void** const arg_ptr_array = calloc(tpool->thread_count, sizeof(*arg_ptr_array));
 

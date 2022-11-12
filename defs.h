@@ -30,4 +30,6 @@ typedef struct
 } Color;
 
 
+typedef double fp_t;
+
 #endif

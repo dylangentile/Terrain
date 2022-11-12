@@ -11,16 +11,16 @@
 
 
 
-double 
-clamp(const double x, const double min, const double max)
+fp_t 
+clamp(const fp_t x, const fp_t min, const fp_t max)
 {
-	const double z = x < min ? min : x;
+	const fp_t z = x < min ? min : x;
 	return z > max ? max : z;
 }
 
 
 int
-write_monochrome_float_image(const char* path, const Coord image_dim, double* image_buf)
+write_monochrome_float_image(const char* path, const Coord image_dim, fp_t* image_buf)
 {
 	const size_t s = image_dim.x * image_dim.y;
 	uint8_t* r_buf = calloc(s, sizeof(*r_buf));
@@ -50,18 +50,20 @@ main(const int argc, const char * const argv[])
 
 
 	int32_t scale_factor = 4;
-	double zoom_out = 1.0;
+	fp_t zoom_out = 4.0;
 
-	const Coord image_dim = {4*1024, 4*1024};
-	double* const noise_image = generate_octave_noise_smp(tpool, image_dim, 8, 2.0, 0.5, ((double)scale_factor)*128.0/zoom_out);
+	const Coord image_dim = {512, 512};
+	fp_t* const noise_image = generate_octave_noise_smp(tpool, image_dim, 8, 2.0, 0.5, ((fp_t)scale_factor)*128.0/zoom_out);
 
-	rassert(write_monochrome_float_image("noise.png", image_dim, noise_image),
+	rassert(write_monochrome_float_image("before.png", image_dim, noise_image),
 		"bad noise image write!");
+	printf("Made Noise image!!!\n");
 
-	erode(noise_image, image_dim);
+	erode(noise_image, image_dim, 100000LL);
 
 	
-
+	rassert(write_monochrome_float_image("after.png", image_dim, noise_image),
+		"bad noise image write!");
 
 
 
